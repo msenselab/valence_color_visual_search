@@ -1,0 +1,849 @@
+---
+title: "Valence color association in attentional capture"
+author: Milos, Hermann, Strongway
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+
+output: html_document
+---
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(lmerTest) # linear mixed mode
+library(sjPlot) # tab_model function
+library(car) #contr.Sum function
+library(emmeans)
+library(patchwork)
+library(effectsize)
+library(brms)
+library(splithalf)
+options(es.use_symbol = TRUE)
+source('data_preprocessing.R')
+
+```
+
+## Experiment 1
+
+### Association phase
+
+Here is a brief summary:
+
+```{r}
+# create a plot function for reuse purpose
+myplot <- function(df, x, y, factor) {
+  sx = sym(x)
+  sy = sym(paste0('m',y))
+  se = sym(paste0('se',y))
+  sp = sym(factor)
+  my_aes = aes(!!sx, !!sy, ymin = !!sy - !!se, max = !!sy + !!se,  shape = !!sp, color = !!sp)
+
+  pd = position_dodge(width = 0.5)
+
+  fig = ggplot(df, my_aes) + 
+    #geom_col_pattern(position = pd, width = 0.4, fill = 'white', colour = 'black',  pattern_density = 0.01 )+
+  #geom_bar(stat = 'identity', position = pd, width = 0.4) + 
+  geom_point(position = pd) + 
+  geom_errorbar(position = pd, width = 0.2) + theme_classic() + 
+  theme(legend.position = 'top') 
+  
+}
+
+# Overall mean RT and accuracy
+print("Mean RT:")
+print(mean(exp1_train_m$RT))
+print("Mean Accuracy:")
+print(mean(exp1_train_m$accuracy))
+# print mean values
+exp1_train_m %>% group_by(Association, target, Group) %>% 
+    summarise(mRT = mean(RT), mAccuracy = mean(accuracy),n=n()) 
+```
+
+Visualize the mean RTs and accuracy in the training session. We combine the two groups together.
+
+```{r Exp1_training_fig}
+
+exp1_mm1 = exp1_train_m %>% group_by(Association, target) %>%
+  summarise(n=n(),mRT = mean(RT)*1000, seRT = sd(RT)/sqrt(n)*1000, 
+            mAcc = mean(accuracy)*100, seAcc = sd(accuracy)*100/sqrt(n))
+
+# mean RT plot
+# recommended by reviewers, we use viridis color scheme
+fig1_1 = myplot(exp1_mm1, "Association","RT","target") + xlab('Group') + ylab('Mean RT (ms)') + 
+  scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
+#  scale_color_manual(values = c("green","red"), labels = c("Green","Red")) +
+  scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
+  xlab("Association")
+# mean Accuracy plot
+fig1_2 = myplot(exp1_mm1, "Association","Acc","target") + xlab('Group') + ylab('Mean Accuracy (%)') +
+  scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
+  scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
+  xlab("Association")
+fig1 = plot_grid(fig1_1, fig1_2, nrow = 1, labels = c("a","b"))
+ggsave(filename = './figures/fig_e1_training.png',fig1, width = 7, height = 3.5) 
+fig1
+```
+
+Having the accuracy and RT in the training session, we can do the ANOVA test. 
+We use the `lmer` function from the `lmerTest` package. 
+
+```{r}
+# test the accuracy with anova with factors of association and target
+#aov(accuracy ~ Association*target + Error(name), data = exp1_train_m) -> aov1
+#summary(aov1)
+
+aov1 = tidy(anova(  lmer(accuracy ~ Association*target + (1|name), data = exp1_train_m) ))
+aov1
+```
+The results showed the significant main effect of target and the interaction between association and target. 
+We then use the `emmeans` function to do the post-hoc comparison and `F_to_eta2()` to get the effect size. 
+  
+  ```{r}
+  F_to_eta2(f = aov1$statistic, df = aov1$NumDF, df_error=aov1$DenDF)
+ ```
+
+  
+```{r accuracy_anova_exp1_train}
+# test the accuracy with anova with factors of association and target
+aov2 = tidy(anova(lmer(RT ~ Association*target + (1|name), data = exp1_train_m)))
+aov2
+```
+The results showed the significant main effect of target. And its effect size:
+```{r}
+F_to_eta2(f = aov2$statistic, df = aov2$NumDF, df_error=aov2$DenDF)
+```
+
+### Test phase
+
+The overall means of the test phase: 
+
+```{r}
+exp1_test_m %>% group_by(Duration, Association, distractor) %>% summarise(mRT = mean(RT), mAccuracy = mean(Accuracy))
+```
+It turns out Exposure is the main factor that affects the accuracy and mean RTs
+```{r}
+exp1_test_m %>% group_by(Duration) %>% summarise(mRT = mean(RT), mAccuracy = mean(Accuracy))
+```
+
+Now test effects of exposure, association, and distractor color, and their interactions on accuracy and RTs. 
+Note the factors "Color-Valence Association" and "Expsosure Duration" were full factorial design, 
+and the distractor color is linked to valence association. We we assume the distractor color contribute alone to accuracy and RTs. 
+Any interactions come from color-valence association and exposure duration. 
+
+```{r}
+exp1_test_m$RTms = exp1_test_m$RT*1000
+
+#aov2 = aov(Accuracy ~ Association*Duration*distractor + Error(name), data = exp1_test_m)
+#summary(aov2)
+aov3 = tidy(anova(lmer(Accuracy ~ Association*Duration+distractor + (1|name), data = exp1_test_m)))
+aov3
+```
+It shows only the main effect of exposure duration is significant. The effect sizes are:
+```{r}
+F_to_eta2(f = aov3$statistic, df = aov3$NumDF, df_error=aov3$DenDF)
+```
+For mean RTs, again it shows only the main effect of exposure duration is significant. 
+```{r}
+aov4 = tidy(anova(lmer(RT ~ Association*Duration+distractor + (1|name), data = exp1_test_m)))
+aov4
+```
+And its effect sizes:
+```{r}
+F_to_eta2(f = aov4$statistic, df = aov4$NumDF, df_error=aov4$DenDF)
+```
+
+Visualize the mean RT and association-test correlation. 
+```{r exp1_test_fig}
+exp1_test_mm = exp1_test_m %>% group_by(Association, distractor) %>%
+  summarise(mRT = mean(RTms), seRT = sd(RTms)/sqrt(n()))
+
+fig2_1 = myplot(exp1_test_mm, "distractor","RT","Association") + xlab('Distractor') + ylab('Mean RT (ms)')
+fig2_1
+
+# correlation
+
+exp1_train_m %>% select(name, target, RT) %>% # calculate preference of color
+  pivot_wider(names_from = target, values_from = RT) %>% 
+  mutate(colorDiff = sign(red - green), colorRG = (red - green)*1000) %>% 
+  mutate(Preference = factor(colorDiff, label = c("Red","Green"))) -> exp1_color_preference
+
+exp1_train_m %>% select(name, Group, Association, RT) %>%
+  pivot_wider(names_from = Association, values_from = RT) %>% 
+  mutate(Learning = (Pleasant - Neutral)*1000) %>% select (-Neutral, -Pleasant) -> exp1_learning
+# for emotion difference
+exp1_test_m %>% filter(Association != 'Absent') %>% group_by(name, Group, Association, Duration) %>%
+  summarise(RT = mean(RT)) %>% pivot_wider(names_from = Association, values_from = RT) %>% 
+  mutate(Interference = (Pleasant - Neutral)*1000) %>% select(-Neutral, -Pleasant) -> exp1_interference
+# for color difference
+exp1_test_m %>% filter(Association != 'Absent') %>% group_by(name, Group, distractor) %>%
+  summarise(RT = mean(RT)) %>% pivot_wider(names_from = distractor, values_from = RT) %>% 
+  mutate(distractorRG = red - green) %>% select(-red, -green) -> exp1_test_distractorRG
+exp1_correlation = left_join(exp1_learning, exp1_interference, by = c('name', 'Group')) %>% 
+  left_join(., exp1_color_preference, by = c('name')) %>%
+  left_join(., exp1_test_distractorRG, by = c('name','Group'))
+
+# fig of correlation
+fig2_2 = ggplot(exp1_correlation, aes(Learning, Interference)) + 
+  geom_point(aes(color = Duration, shape = Duration)) + 
+  scale_color_manual(values = c("black","grey")) +
+  geom_smooth(method = 'lm', se = F, color = 'black') + theme_classic() + 
+  xlab('Valence preference (Pleasant - Neutral, ms)') + 
+  ylab('Distractor effect (Pleasant - Neutral, ms)') + #facet_wrap(~Group, ncol = 1) + 
+  theme(legend.position = 'top') 
+# save figure
+ggsave(filename = './figures/fig_e1_corr.png',fig2_2, width = 3.5, height = 3.5) 
+
+fig2_2
+
+```
+
+Now we analyze the correlation between the association effect and the distractor effect. 
+```{r}
+mod_cor1 = lm(Interference ~ Learning, data = exp1_correlation)
+print(summary(mod_cor1))
+print(cor_test(data = exp1_correlation, vars = Learning, vars2 = Interference ))
+```
+
+
+## Experiment 2
+
+### Training session
+
+Overall summary
+```{r}
+
+exp2_train_m %>% group_by(Group, Arousal, Valence) %>% summarise(mRT = mean(RT), mAccuracy = mean(Accuracy),n=n())
+
+# Overall mean RT and accuracy
+print("Mean RT:")
+print(mean(exp2_train_m$RT))
+print("Mean Accuracy:")
+print(mean(exp2_train_m$Accuracy))
+
+```
+
+Figure for training session
+
+```{r Exp2_training_fig}
+exp2_mm1 = exp2_train_m %>% group_by(Arousal, Valence, target) %>%
+  summarise(n=n(),mRT = mean(RT)*1000,  seRT = sd(RT)/sqrt(n)*1000, 
+            mAccuracy = mean(Accuracy), seAccuracy = sd(Accuracy)/sqrt(n))
+
+fig4_1 = myplot(exp2_mm1, "Valence","RT","target") + facet_wrap(~Arousal) +
+   ylab('Mean RT (ms)') + 
+  scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
+  scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
+  theme(axis.title.x = element_blank(), 
+                                panel.border = element_blank(), panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(), strip.background = element_blank())
+fig4_2 =  myplot(exp2_mm1, "Valence","Accuracy","target") + facet_wrap(~Arousal) +
+  xlab('Association') + ylab('Accuracy') + 
+  scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
+  scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
+  theme(legend.position = 'none',
+                                                  strip.text = element_blank())
+fig4 = plot_grid(fig4_1, fig4_2, nrow = 2 )
+# save figure
+ggsave(filename = './figures/fig_e2_training.png',fig4, width = 7, height = 5)
+fig4
+
+```
+
+Linear mixed model for the training accuracy and RTs
+```{r}
+aov5 = tidy(anova(lmer(Accuracy ~ Valence*Arousal*target + (1|name), data = exp2_train_m)))
+aov5
+```
+It shows the main effect of target, marginal effect of Valence x Arousal, but not others. 
+Here are the effect sizes:
+```{r}
+F_to_eta2(f = aov5$statistic, df = aov5$NumDF, df_error=aov5$DenDF)
+```
+```{r}
+mod6 = lmer(RT ~ Valence*Arousal*target + (1|name), data = exp2_train_m)
+aov6 = tidy(anova(mod6))
+aov6
+```
+It shows the main effect of Arousal, target, but not Valence.
+Here are the effect sizes:
+```{r}
+F_to_eta2(f = aov6$statistic, df = aov6$NumDF, df_error=aov6$DenDF)
+```
+compare the meanRTs of high vs. low arousal, and target color (red vs. green)
+```{r}
+emmeans(mod6, pairwise ~ Arousal, adjust = 'BY')
+```
+```{r}
+emmeans(mod6, pairwise ~ target, adjust = 'BY')
+```
+### Test session
+
+A general mean RT and accuracy in the test session:
+```{r}
+# Overall mean RT and accuracy
+print("Mean RT:")
+print(mean(exp2_test_m$RT))
+print("Mean Accuracy:")
+print(mean(exp2_test_m$accuracy))
+
+```
+First, let's check effects in the training session for accuracy and RTs. 
+```{r}
+# accuracy
+mod7 = lmer(accuracy ~ Valence*Arousal*Duration + distractor + (1|name), data = exp2_test_m)
+aov7 = tidy(anova(mod7))
+aov7
+```
+The main effect of Arousal, Exposure Duration, and Distractor Color were significant, but not Valence!
+Here are the effect sizes:
+```{r}
+F_to_eta2(f = aov7$statistic, df = aov7$NumDF, df_error=aov7$DenDF)
+```
+
+```{r}
+exp2_test_m %>% group_by(Duration) %>% summarise(mAcc = mean(accuracy))
+exp2_test_m %>% group_by(Arousal) %>% summarise(mAcc = mean(accuracy))
+
+```
+Linear mixed model and ANOVA for RTs
+```{r}
+mod8 = lmer(RT ~ Valence*Arousal*Duration + distractor + (1|name), data = exp2_test_m)
+aov8 = tidy(anova(mod8))
+aov8
+```
+The main effect of Arousal, Exposure Duration, were significant, but not Valence and distractor color!
+Here are the effect sizes:
+```{r}
+F_to_eta2(f = aov8$statistic, df = aov8$NumDF, df_error=aov8$DenDF)
+```
+```{r}
+exp2_test_m %>% group_by(Arousal) %>% summarise(mRT = mean(RT))
+exp2_test_m %>% group_by(Duration) %>% summarise(mRT = mean(RT))
+```
+
+```{r exp2_test_fig}
+
+# build correlation data set
+ungroup(exp2_train_m) %>% group_by(name,Arousal, Valence) %>% summarize(RT = mean(RT)) %>%
+  pivot_wider(names_from = Valence, values_from = RT) %>% 
+  mutate(Learning = (Pleasant - Neutral)*1000) %>% select (-Neutral, -Pleasant) -> exp2_learning 
+
+ungroup(exp2_test_m) %>% filter(Valence != 'Absent') %>% group_by(name,Arousal,Duration, Valence) %>%  
+  summarise(RT = mean(RT)) -> exp2_inter
+# association-based interference
+exp2_inter %>% pivot_wider(names_from = Valence, values_from = RT) %>% 
+  mutate(Interference = (Pleasant - Neutral)*1000) %>% select(-Neutral, -Pleasant) -> exp2_interference
+# color-based interference
+#exp2_inter %>% pivot_wider(names_from = Valence, values_from = RT) -> exp2_inter_color
+
+exp2_correlation = left_join(exp2_learning, exp2_interference, by = c('name','Arousal')) 
+
+
+# correlation figure
+fig5_1 = ggplot(exp2_correlation, aes(Learning, Interference)) + 
+  geom_point(aes( color = Arousal, shape = Duration)) + 
+  geom_smooth(method = 'lm', se = F, color = 'black') + theme_classic() + 
+  scale_color_manual(values = c("black","grey")) +
+  xlab('Valence preference (Pleasant - Neutral, ms)') + 
+  ylab('Distractor effect (Pleasant - Neutral, ms)') + 
+  theme(legend.position = 'top', legend.text = element_text(size=8), 
+        legend.title = element_text(size = 8))
+
+# reduce font size of the legend
+# save figure
+#ggsave(filename = './figures/fig_e2_corr.png',fig5_1, width = 3.5, height = 3.5)
+fig5_1
+
+
+```
+
+```{r exp2_correlation}
+
+cor_test(data = ungroup(exp2_correlation), vars = Learning, vars2 = Interference )
+```
+```{r combine_correlation}
+comb_corr = rbind(exp1_correlation %>% group_by(name) %>% 
+                    summarise(Learning = mean(Learning), Interference = mean(Interference)) %>%
+                    mutate(Exp = 'Exp. 1'), 
+                      exp2_correlation %>% ungroup() %>%group_by(name) %>% 
+                    summarise(Learning = mean(Learning), Interference = mean(Interference)) %>% 
+                    mutate(Exp = 'Exp. 2'))
+# combine experiment 1 and 2 for correlation analysis
+cor_test(data = comb_corr, 
+         vars = Learning, vars2 = Interference )
+
+```
+```{r}
+anova(lm(Interference ~ Learning, data = comb_corr))
+```
+
+```{r}
+fig5_2 = ggplot(comb_corr, aes(Learning, Interference)) + 
+  geom_point(aes(shape = Exp, color = Exp)) + 
+  geom_smooth(method = 'lm', se = F, color = 'black') + theme_classic() + 
+  scale_color_manual(values = c("black","grey")) +
+  xlab('Valence preference (Pleasant - Neutral, ms)') + 
+  ylab('Distractor effect (Pleasant - Neutral, ms)') + 
+  theme(legend.position = 'top',, legend.text = element_text(size=8), 
+        legend.title = element_text(size = 8)) 
+fig5_2
+fig5 = plot_grid(fig5_1,fig5_2, labels = c("a","b"))
+# save fig5
+ggsave(filename = './figures/fig5_corr.png',fig5, width = 9, height = 4.5)
+fig5
+
+```
+
+## Experiment 3
+
+
+### Association phase
+
+Here is a brief summary:
+
+```{r}
+# print mean values
+exp3_train_m %>% group_by(target, valence) %>% summarise(mRT = mean(RT), mAccuracy = mean(Accuracy),n=n()) 
+exp3_train_m %>% group_by(valence) %>% summarise(mRT = mean(RT), mAccuracy = mean(Accuracy),n=n()) 
+
+# Overall mean RT and accuracy
+print("Mean RT:")
+print(mean(exp3_train_m$RT))
+print("Mean Accuracy:")
+print(mean(exp3_train_m$Accuracy))
+
+```
+Plot the mean RTs and relative mean RTs in the training session. 
+
+```{r Exp3_training_fig}
+exp3_mm1 = exp3_train_m %>% group_by(valence, target) %>%
+  summarise(n=n(),mRT = mean(RT)*1000,  seRT = sd(RT)/sqrt(n)*1000,
+            mAccuracy = mean(Accuracy), seAccuracy = sd(Accuracy)/sqrt(n))
+
+fig6_1 = myplot(exp3_mm1, "valence","RT","target") + 
+  scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
+  scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
+  xlab('Association') + ylab('Mean RT (ms)')
+fig6_2 = myplot(exp3_mm1, "valence","Accuracy","target") + 
+  scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
+  scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
+  xlab('Association') + ylab('Accuracy')
+fig6 = plot_grid(fig6_1, fig6_2, nrow = 1, labels = c("a","b"))
+#save fig
+ggsave(filename = './figures/fig_e3_training.png',fig6, width = 7, height = 3.5)
+fig6
+
+```
+
+
+ANOVA tests:
+
+```{r, warning = FALSE, message = FALSE}
+mod9 = lmer(Accuracy ~ target*valence + (1 | participants), data=exp3_train_m)
+aov9 = tidy(anova(mod9))
+aov9
+```
+it's effect sizes:
+```{r}
+F_to_eta2(f = aov9$statistic, df = aov9$NumDF, df_error=aov9$DenDF)
+```
+```{r}
+exp3_train_m %>% group_by(target) %>% summarise(mAcc = mean(Accuracy))
+
+```
+Statistical tests for RTs
+
+```{r}
+mod10 = lmer(RT ~ target*valence + (1 | participants), data=exp3_train_m)
+aov10 = tidy(anova(mod10))
+aov10
+```
+and the effect sizes:
+```{r}
+F_to_eta2(f = aov10$statistic, df = aov10$NumDF, df_error=aov10$DenDF)
+```
+
+### Test phase
+
+The overall means of the test phase. 
+Get a mean table:
+```{r}
+exp3_test_m %>% group_by( target, exposure, target_status) %>% summarise(mRT = mean(RT), mAccuracy = mean(Accuracy)) %>% 
+  pivot_wider(names_from = target_status, values_from = c('mRT','mAccuracy'))
+
+print(mean(exp3_test_m$Accuracy))
+
+```
+Statistical tests on accuracy and RTs in the test phase. 
+```{r}
+mod11 = lmer(Accuracy ~ target_status*exposure + target + (1|participants), data = exp3_test_m)
+aov11 = tidy(anova(mod11))
+aov11
+```
+and the effect sizes:
+```{r}
+F_to_eta2(f = aov11$statistic, df = aov11$NumDF, df_error=aov11$DenDF)
+```
+Pairwise comparison on Target Association:
+```{r}
+emmeans(lmer(Accuracy ~ target_status + (1|participants), data = exp3_test_m), pairwise ~ target_status, adjust = 'BY' )
+```
+
+Now statistics for RTs:
+```{r}
+mod12 = lmer(RT ~ target_status*exposure + target + (1|participants), data = exp3_test_m)
+aov12 = tidy(anova(mod12))
+aov12
+```
+Only the main effect of target status is significant. Here are the effect sizes:
+```{r}
+F_to_eta2(f = aov12$statistic, df = aov12$NumDF, df_error=aov12$DenDF)
+```
+
+```{r}
+emmeans(lmer(RT ~ target_status + (1|participants), data = exp3_test_m), pairwise ~ target_status, 
+        adjust = "BY")
+```
+
+Visualize the mean RT etc. 
+```{r exp3_test_fig}
+# grand mean of the test
+exp3_mm2 = exp3_test_m %>% group_by(target, exposure, target_status) %>%
+  summarise(n=n(),mRT = mean(RT)*1000, seRT = sd(RT)/sqrt(n)*1000, 
+            mAccuracy = mean(Accuracy), seAccuracy = sd(Accuracy)/sqrt(n)) 
+
+# correlation
+# find out association group first
+sub_group = exp3_train_m %>% select(participants, target, valence) %>% 
+  filter(valence == 'pleasant') %>% distinct() %>% #select unique
+  unite("Group", target, valence)
+
+ungroup(exp3_train_m) %>% select(participants, target, RT) %>% # calculate preference of color
+  pivot_wider(names_from = target, values_from = RT) %>% 
+  mutate(colorDiff = sign(red - green)) %>%
+  mutate(Preference = factor(colorDiff, labels = c("Red","Green"))) -> exp3_color_preference
+
+exp3_train_m %>% select(participants, valence, RT) %>%
+  pivot_wider(names_from = valence, values_from = RT) %>% 
+  mutate(Learning = (pleasant - neutral)*1000) %>% select (-neutral, -pleasant) -> exp3_learning
+exp3_test_m %>% filter(target_status != 'none') %>% group_by(participants, exposure, target_status) %>%
+  summarise(RT = mean(RT)) %>% pivot_wider(names_from = target_status, values_from = RT) %>% 
+  mutate(Interference = (pleasant - neutral)*1000) %>% select(-neutral, -pleasant) -> exp3_interference
+exp3_correlation = left_join(exp3_learning, exp3_interference, by = c('participants')) %>% 
+  left_join(., exp3_color_preference, by = c('participants')) %>%
+  left_join(., sub_group, by = c('participants'))
+
+# mean RT
+fig7_1 = myplot(exp3_mm2, "target_status","RT","target") + 
+  xlab('Association') + ylab('Mean RT (ms)') + 
+  scale_color_viridis_d(begin = 0.2, labels = c("Other","Green","Red"), direction = -1) +
+#  scale_color_manual(values = c("grey","green","red"), labels = c("Other","Green","Red")) +
+  scale_shape_manual(values = c(1,2,4), labels = c("Other","Green","Red")) +
+  facet_wrap(~exposure) + 
+  theme(axis.title.x = element_blank(), 
+                                panel.border = element_blank(), panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(), strip.background = element_blank())
+
+# mean ACC
+fig7_2 = myplot(exp3_mm2, "target_status","Accuracy","target") + 
+  xlab('Association') + ylab('Mean Accuracy') + 
+  scale_color_viridis_d(begin = 0.2, labels = c("Other","Green","Red"), direction = -1) +
+#  scale_color_manual(values = c("grey","green","red"), labels = c("Other","Green","Red")) +
+  scale_shape_manual(values = c(1,2,4), labels = c("Other","Green","Red")) +
+  facet_wrap(~exposure) + 
+  theme(legend.position = 'none',
+                                                  strip.text = element_blank())
+
+fig7 = plot_grid(fig7_1, fig7_2, nrow = 2)
+#save fig
+ggsave(filename = './figures/fig_e3_test.png',fig7, width = 7, height = 5)
+
+fig7
+
+```
+
+```{r}
+# fig of correlation
+fig8 = ggplot(exp3_correlation, aes(Learning, Interference)) + 
+  geom_point(aes(color = exposure, shape = exposure)) + 
+  geom_smooth(method = 'lm', se = F, color = 'black') + theme_classic() + 
+  xlab('Valence preference (Pleasant - Neutral, ms)') + 
+  ylab('Target effect (Pleasant - Neutral, ms)') + 
+  scale_color_manual(values = c("black","grey")) +
+  theme(legend.position = 'top')
+#save fig
+ggsave(filename = './figures/fig_e3_corr.png',fig8, width = 3.5, height = 3.5)
+fig8
+
+```
+
+
+```{r}
+# correlation
+
+cor_test(data = ungroup(exp3_correlation), vars = Learning, vars2 = Interference )
+```
+```{r}
+summary(lm(Interference ~ Learning, data = exp3_correlation))
+```
+
+
+### Omnibus analysis
+
+1. Training phase
+```{r}
+tr1 = exp1_train_m %>% select(name, Association, target, RT) %>% rename(Valence = Association) %>% 
+  mutate(Experiment = 'Exp. 1')
+tr2 = ungroup(exp2_train_m) %>% select(name, Valence, target, RT) %>%
+  mutate(Experiment = 'Exp. 2', name = paste0('e2_',name) )
+tr3 = exp3_train_m %>% select(participants, valence, target, RT) %>% 
+  rename(Valence = valence, name = participants) %>% mutate(Experiment = 'Exp. 3', name = paste0('e3_', name))
+tr3$Valence = factor(tr3$Valence, labels = c("Neutral","Pleasant"))
+trs = rbind(tr1, tr2, tr3)
+
+mod13 = lmer(RT ~ target*Valence + (1| name), data=trs)
+aov13 = tidy(anova(mod13))
+aov13
+```
+It shows only the target color was significant. Here are the effect sizes:
+```{r}
+F_to_eta2(f = aov13$statistic, df = aov13$NumDF, df_error=aov13$DenDF)
+```
+now calculate Bayes factors for the main effects of target and valence
+```{r}
+b1 = brm(RT ~ target + (1|name), data = trs, save_all_pars = TRUE, family = gaussian())
+b0 = brm(RT ~ 1 + (1|name), data = trs, save_all_pars = TRUE, family = gaussian())
+bayes_factor(b1, b0)
+```
+Valence: 
+```{r}
+b1 = brm(RT ~ Valence + (1|name), data = trs, save_all_pars = TRUE, family = gaussian())
+b0 = brm(RT ~ 1 + (1|name), data = trs, save_all_pars = TRUE, family = gaussian())
+bayes_factor(b1, b0)
+```
+```{r}
+```
+
+Visualize the mean RTs in the training phase.
+```{r}
+m_trs = trs %>% group_by(Valence, target) %>%
+  summarise(n=n(),mRT = mean(RT)*1000, seRT = sd(RT)/sqrt(n)*1000)
+
+fig_om_train = myplot(m_trs, "Valence","RT","target") + 
+  xlab('Association') + ylab('Mean RT (ms)') + 
+  scale_color_viridis_d( end = 0.8, direction  = -1) +
+  labs(tag = "a")
+fig_om_train
+```
+
+2. Test phase
+
+```{r}
+te1 = exp1_test_m %>% group_by(name, Association, distractor) %>% summarise(RT = mean(RT)) %>%
+  rename(Valence = Association) %>%   mutate(Experiment = 'Exp. 1') %>% 
+  rename(Color = distractor) 
+te2 = exp2_test_m %>% group_by(name, Valence, distractor) %>% summarise(RT = mean(RT)) %>% 
+  mutate(Experiment = 'Exp. 2', name = paste0('e2_',name) ) %>% rename(Color = distractor)
+te3 = exp3_test_m %>% ungroup() %>% group_by(participants, target_status, target) %>%
+  summarise(RT = mean(RT)) %>% 
+  rename(Valence = target_status, name = participants) %>% 
+  mutate(Experiment = 'Exp. 3', name = paste0('e3_', name)) %>% rename(Color = target)
+te3$Valence = factor(te3$Valence, labels = c( "Neutral", "Other","Pleasant"))
+tests = rbind(te1, te2, te3)
+
+# here we only focus on the pleasant and neutral association in the test phases (ignore the absent association)
+tests_np = tests %>% filter(Valence %in% c('Neutral', 'Pleasant'))
+mod14 = lmer(RT ~ Color*Valence + (1| name), 
+  data=tests %>% filter(Valence %in% c('Neutral', 'Pleasant')))
+aov14 = tidy(anova(mod14))
+aov14
+```
+and related effect sizes:
+```{r}
+F_to_eta2(f = aov14$statistic, df = aov14$NumDF, df_error=aov14$DenDF)
+```
+Now calculate Bayes factors for the main effects of color and valence
+```{r}
+b1 = brm(RT ~ Color + (1|name), data = tests_np, 
+         save_all_pars = TRUE, family = gaussian())
+bayes_factor(b1, b0)
+```
+and Valence
+```{r}
+b1 = brm(RT ~ Valence + (1|name), data = tests_np, 
+         save_all_pars = TRUE, family = gaussian())
+b0 = brm(RT ~ 1 + (1|name), data = tests_np,
+          save_all_pars = TRUE, family = gaussian())
+bayes_factor(b1, b0)
+```
+and their interaction:
+```{r}
+b1 = brm(RT ~ Valence*Color + (1|name), data = tests_np, 
+         save_all_pars = TRUE, family = gaussian())
+b0 = brm(RT ~ Valence + Color + (1|name), data = tests_np, 
+         save_all_pars = TRUE, family = gaussian())
+bayes_factor(b1, b0)
+```
+
+Visualize the mean RTs in the test phase.
+```{r}
+m_tests = tests %>% group_by(Valence, Color) %>%
+  summarise(n=n(),mRT = mean(RT)*1000, seRT = sd(RT)/sqrt(n)*1000)
+
+fig_om_test = myplot(m_tests, "Valence","RT","Color") + xlab('Association') + 
+  ylab('Mean RT (ms)') +
+  scale_color_viridis_d(begin = 0.2, labels = c("Other","Green","Red"), direction = -1) +
+#  scale_color_manual(values = c("grey","green","red"), labels = c("Other","Green","Red")) +
+  scale_shape_manual(values = c(1,2,4), labels = c("Other","Green","Red")) + labs(tag = "b")
+
+fig_om_test
+```
+
+And visualize the correlation between the training and test phase.
+```{r combine_all_data_together}
+cor1 = exp1_correlation %>% group_by(name) %>% 
+  summarize(Learning = mean(Learning), Interference = mean(Interference)) %>% 
+              mutate(Experiment = 'Exp. 1')
+cor2 = exp2_correlation %>% ungroup() %>%group_by(name) %>% 
+  summarize(Learning = mean(Learning), Interference = mean(Interference)) %>% 
+              mutate(Experiment = 'Exp. 2')
+cor3 = exp3_correlation %>% group_by(participants) %>% 
+  summarize(Learning = mean(Learning), Interference = mean(Interference)) %>% 
+  rename(name = participants) %>% mutate(Experiment = 'Exp. 3')
+corrs = rbind(cor1, cor2, cor3)
+
+fig_omnibus = ggplot(corrs, aes(Learning, Interference)) + 
+  geom_point(aes(color = Experiment, shape = Experiment)) + 
+  geom_smooth(method = 'lm', se = FALSE) + theme_classic() + 
+  xlab('Learning phase (Pleasant - Neutral, ms)') + 
+  ylab('Test phase (Pleasant - Neutral, ms)') + 
+  scale_color_viridis_d(begin = 0.2, direction = -1) +
+  theme(legend.position = c(0.2,0.8))+ labs(tag = "c")
+fig_omnibus
+```
+The correlation test showed a significant correlation between the learning and test phase.
+```{r}
+cor_test(data = ungroup(corrs), vars = Learning, vars2 = Interference )
+
+```
+Now combine all figures together into one and save it.
+
+```{r}
+fig_om = (fig_om_train  / fig_om_test + labs(tag = "b")) | fig_omnibus
+#save fig
+ggsave(filename = './figures/fig_omn.png',fig_om, width = 7, height = 5)
+fig_om
+```
+
+### Splithalf reliability
+
+1. Experiment 1
+
+```{r}
+# split half reliability
+# prepare clean data from raw_exp1$training
+droplevels(raw_exp1$training) %>% select(name, trlNr, Association, RT) -> exp1_training
+difference1 = splithalf(data = exp1_training,
+      outcome = "RT", 
+      score = "difference",
+      halftype = "random",
+      permutations = 5000,
+      var.RT = "RT",
+      var.participant = "name",
+      var.compare = "Association",
+      compare1 = "Neutral",
+      compare2 = "Pleasant",
+      average = "mean",
+      plot = TRUE)
+raw_exp1$testing %>% select(name, trlNr, Duration, Association, RT) %>%
+    filter(Association != "Absent") %>% droplevels() -> exp1_testing
+difference2 = splithalf(data = exp1_testing,
+      outcome = "RT", 
+      score = "difference",
+      conditionlist = c("Short","Long"),
+      halftype = "random",
+      permutations = 5000,
+      var.RT = "RT",
+      var.condition = "Duration",
+      var.participant = "name",
+      var.compare = "Association",
+      compare1 = "Neutral",
+      compare2 = "Pleasant",
+      average = "mean")
+```
+
+2. Experiment 2
+
+```{r}
+# split half reliability
+# prepare clean data from raw_exp1$training
+droplevels(raw_exp2$training) %>% select(name, trlNr, Arousal, Valence, RT) -> exp2_training
+difference3 = splithalf(data = exp2_training,
+      outcome = "RT", 
+      score = "difference",
+      halftype = "random",
+      conditionlist = c("high","low"),
+      permutations = 5000,
+      var.RT = "RT",
+      var.participant = "name",
+      var.compare = "Valence",
+      var.condition = "Arousal",
+      compare1 = "Neutral",
+      compare2 = "Pleasant",
+      average = "mean")
+
+raw_exp2$testing %>% select(name, trlNr, Duration, Arousal, Valence, RT) %>%
+    filter(Valence != "Absent") %>%
+    # combine columns Arousal and Duration into one column
+    mutate(Condition = paste0(Arousal, "_",Duration)) %>% droplevels() -> exp2_testing
+difference4 = splithalf(data = exp2_testing,
+      outcome = "RT", 
+      score = "difference",
+      conditionlist = c("high_Short","low_Short","high_Long","low_Long"),
+      halftype = "random",
+      permutations = 5000,
+      var.RT = "RT",
+      var.condition = "Condition",
+      var.participant = "name",
+      var.compare = "Valence",
+      compare1 = "Neutral",
+      compare2 = "Pleasant",
+      average = "mean")
+```
+
+
+2. Experiment 3
+
+```{r}
+# split half reliability
+# prepare clean data from raw_exp1$training
+droplevels(raw_exp3$training) %>% select(participants, valence, rt) -> exp3_training
+difference5 = splithalf(data = exp3_training,
+      outcome = "RT", 
+      score = "difference",
+      halftype = "random",
+      permutations = 5000,
+      var.RT = "rt",
+      var.participant = "participants",
+      var.compare = "valence",
+      compare1 = "neutral",
+      compare2 = "pleasant",
+      average = "mean")
+
+raw_exp3$testing %>% select(participants, exposure, target_status, rt) %>%
+    filter(target_status != "none") %>% droplevels() -> exp3_testing
+difference6 = splithalf(data = exp3_testing,
+      outcome = "RT", 
+      score = "difference",
+      conditionlist = c("short","long"),
+      halftype = "random",
+      permutations = 5000,
+      var.RT = "rt",
+      var.condition = "exposure",
+      var.participant = "participants",
+      var.compare = "target_status",
+      compare1 = "neutral",
+      compare2 = "pleasant",
+      average = "mean")
+```
+End of the document.
+
+
