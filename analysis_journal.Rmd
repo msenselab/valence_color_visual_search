@@ -1,9 +1,10 @@
 ---
 title: "Valence color association in attentional capture"
-author: Milos, Hermann, Strongway
+author: "Milos, Hermann, Strongway"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
-
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
