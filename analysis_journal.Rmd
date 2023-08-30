@@ -79,6 +79,7 @@ fig1_2 = myplot(exp1_mm1, "Association","Acc","target") + xlab('Group') + ylab('
   scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
   xlab("Association")
 fig1 = plot_grid(fig1_1, fig1_2, nrow = 1, labels = c("a","b"))
+ggsave(filename = './figures/fig_e1_training.pdf',fig1, width = 7, height = 3.5) 
 ggsave(filename = './figures/fig_e1_training.png',fig1, width = 7, height = 3.5) 
 fig1
 ```
@@ -190,6 +191,7 @@ fig2_2 = ggplot(exp1_correlation, aes(Learning, Interference)) +
   ylab('Distractor effect (Pleasant - Neutral, ms)') + #facet_wrap(~Group, ncol = 1) + 
   theme(legend.position = 'top') 
 # save figure
+ggsave(filename = './figures/fig3.pdf',fig2_2, width = 3.5, height = 3.5) 
 ggsave(filename = './figures/fig_e1_corr.png',fig2_2, width = 3.5, height = 3.5) 
 
 fig2_2
@@ -226,7 +228,7 @@ Figure for training session
 ```{r Exp2_training_fig}
 exp2_mm1 = exp2_train_m %>% group_by(Arousal, Valence, target) %>%
   summarise(n=n(),mRT = mean(RT)*1000,  seRT = sd(RT)/sqrt(n)*1000, 
-            mAccuracy = mean(Accuracy), seAccuracy = sd(Accuracy)/sqrt(n))
+            mAccuracy = mean(Accuracy)*100, seAccuracy = sd(Accuracy)*100/sqrt(n))
 
 fig4_1 = myplot(exp2_mm1, "Valence","RT","target") + facet_wrap(~Arousal) +
    ylab('Mean RT (ms)') + 
@@ -236,13 +238,14 @@ fig4_1 = myplot(exp2_mm1, "Valence","RT","target") + facet_wrap(~Arousal) +
                                 panel.border = element_blank(), panel.grid.major = element_blank(),
                panel.grid.minor = element_blank(), strip.background = element_blank())
 fig4_2 =  myplot(exp2_mm1, "Valence","Accuracy","target") + facet_wrap(~Arousal) +
-  xlab('Association') + ylab('Accuracy') + 
+  xlab('Association') + ylab('Accuracy (%)') + 
   scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
   scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
   theme(legend.position = 'none',
                                                   strip.text = element_blank())
 fig4 = plot_grid(fig4_1, fig4_2, nrow = 2 )
 # save figure
+ggsave(filename = './figures/fig4.pdf',fig4, width = 7, height = 5)
 ggsave(filename = './figures/fig_e2_training.png',fig4, width = 7, height = 5)
 fig4
 
@@ -388,6 +391,7 @@ fig5_2 = ggplot(comb_corr, aes(Learning, Interference)) +
 fig5_2
 fig5 = plot_grid(fig5_1,fig5_2, labels = c("a","b"))
 # save fig5
+ggsave(filename = './figures/fig5.pdf',fig5, width = 9, height = 4.5)
 ggsave(filename = './figures/fig5_corr.png',fig5, width = 9, height = 4.5)
 fig5
 
@@ -417,7 +421,7 @@ Plot the mean RTs and relative mean RTs in the training session.
 ```{r Exp3_training_fig}
 exp3_mm1 = exp3_train_m %>% group_by(valence, target) %>%
   summarise(n=n(),mRT = mean(RT)*1000,  seRT = sd(RT)/sqrt(n)*1000,
-            mAccuracy = mean(Accuracy), seAccuracy = sd(Accuracy)/sqrt(n))
+            mAccuracy = mean(Accuracy)*100, seAccuracy = sd(Accuracy)*100/sqrt(n))
 
 fig6_1 = myplot(exp3_mm1, "valence","RT","target") + 
   scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
@@ -426,9 +430,10 @@ fig6_1 = myplot(exp3_mm1, "valence","RT","target") +
 fig6_2 = myplot(exp3_mm1, "valence","Accuracy","target") + 
   scale_color_viridis_d( end = 0.8, labels = c("Green","Red"), direction  = -1) +
   scale_shape_manual(values = c(1,2), labels = c("Green","Red")) +
-  xlab('Association') + ylab('Accuracy')
+  xlab('Association') + ylab('Accuracy (%)')
 fig6 = plot_grid(fig6_1, fig6_2, nrow = 1, labels = c("a","b"))
 #save fig
+ggsave(filename = './figures/fig6.pdf',fig6, width = 7, height = 3.5)
 ggsave(filename = './figures/fig_e3_training.png',fig6, width = 7, height = 3.5)
 fig6
 
@@ -509,7 +514,7 @@ Visualize the mean RT etc.
 # grand mean of the test
 exp3_mm2 = exp3_test_m %>% group_by(target, exposure, target_status) %>%
   summarise(n=n(),mRT = mean(RT)*1000, seRT = sd(RT)/sqrt(n)*1000, 
-            mAccuracy = mean(Accuracy), seAccuracy = sd(Accuracy)/sqrt(n)) 
+            mAccuracy = mean(Accuracy)*100, seAccuracy = sd(Accuracy)*100/sqrt(n)) 
 
 # correlation
 # find out association group first
@@ -545,7 +550,7 @@ fig7_1 = myplot(exp3_mm2, "target_status","RT","target") +
 
 # mean ACC
 fig7_2 = myplot(exp3_mm2, "target_status","Accuracy","target") + 
-  xlab('Association') + ylab('Mean Accuracy') + 
+  xlab('Association') + ylab('Mean Accuracy (%)') + 
   scale_color_viridis_d(begin = 0.2, labels = c("Other","Green","Red"), direction = -1) +
 #  scale_color_manual(values = c("grey","green","red"), labels = c("Other","Green","Red")) +
   scale_shape_manual(values = c(1,2,4), labels = c("Other","Green","Red")) +
@@ -555,6 +560,7 @@ fig7_2 = myplot(exp3_mm2, "target_status","Accuracy","target") +
 
 fig7 = plot_grid(fig7_1, fig7_2, nrow = 2)
 #save fig
+ggsave(filename = './figures/fig7.pdf',fig7, width = 7, height = 5)
 ggsave(filename = './figures/fig_e3_test.png',fig7, width = 7, height = 5)
 
 fig7
@@ -571,6 +577,7 @@ fig8 = ggplot(exp3_correlation, aes(Learning, Interference)) +
   scale_color_manual(values = c("black","grey")) +
   theme(legend.position = 'top')
 #save fig
+ggsave(filename = './figures/fig8.pdf',fig8, width = 3.5, height = 3.5)
 ggsave(filename = './figures/fig_e3_corr.png',fig8, width = 3.5, height = 3.5)
 fig8
 
@@ -730,6 +737,7 @@ Now combine all figures together into one and save it.
 ```{r}
 fig_om = (fig_om_train  / fig_om_test + labs(tag = "b")) | fig_omnibus
 #save fig
+ggsave(filename = './figures/fig9.pdf',fig_om, width = 7, height = 5)
 ggsave(filename = './figures/fig_omn.png',fig_om, width = 7, height = 5)
 fig_om
 ```
